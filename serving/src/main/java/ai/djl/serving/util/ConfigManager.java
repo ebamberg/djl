@@ -12,12 +12,6 @@
  */
 package ai.djl.serving.util;
 
-import ai.djl.serving.Arguments;
-import ai.djl.util.Utils;
-import ai.djl.util.cuda.CudaUtils;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -39,6 +33,13 @@ import java.util.Collection;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Properties;
+
+import ai.djl.serving.Arguments;
+import ai.djl.util.Utils;
+import ai.djl.util.cuda.CudaUtils;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 
 /** A class that hold configuration information. */
 public final class ConfigManager {

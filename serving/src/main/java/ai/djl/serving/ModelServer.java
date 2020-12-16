@@ -12,21 +12,6 @@
  */
 package ai.djl.serving;
 
-import ai.djl.repository.FilenameUtils;
-import ai.djl.serving.util.ConfigManager;
-import ai.djl.serving.util.Connector;
-import ai.djl.serving.util.ServerGroups;
-import ai.djl.serving.wlm.ModelInfo;
-import ai.djl.serving.wlm.ModelManager;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ServerChannel;
-import io.netty.handler.ssl.SslContext;
-import io.netty.util.internal.logging.InternalLoggerFactory;
-import io.netty.util.internal.logging.Slf4JLoggerFactory;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
@@ -41,6 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -48,6 +34,23 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import ai.djl.repository.FilenameUtils;
+import ai.djl.serving.util.ConfigManager;
+import ai.djl.serving.util.Connector;
+import ai.djl.serving.util.ServerGroups;
+import ai.djl.serving.wlm.ModelInfo;
+import ai.djl.serving.wlm.ModelManager;
+import ai.djl.serving.wlm.WorkLoadManager;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
+import io.netty.handler.ssl.SslContext;
+import io.netty.util.internal.logging.InternalLoggerFactory;
+import io.netty.util.internal.logging.Slf4JLoggerFactory;
 
 /** The main entry point for model server. */
 public class ModelServer {
@@ -244,7 +247,7 @@ public class ModelServer {
     }
 
     private void initModelStore() throws IOException {
-        ModelManager.init(configManager);
+        ModelManager.init(configManager, new WorkLoadManager());
         Set<String> startupModels = ModelManager.getInstance().getStartupModels();
 
         String loadModels = configManager.getLoadModels();

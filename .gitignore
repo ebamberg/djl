@@ -14,3 +14,7 @@ libs
 *.dylib
 *.dll
 *.class
+.settings
+.classpath
+.project
+bin/

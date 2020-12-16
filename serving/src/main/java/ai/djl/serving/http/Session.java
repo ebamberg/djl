@@ -12,8 +12,9 @@
  */
 package ai.djl.serving.http;
 
-import io.netty.handler.codec.http.HttpRequest;
 import java.util.UUID;
+
+import io.netty.handler.codec.http.HttpRequest;
 
 /** A class that holds HTTP session information. */
 public class Session {

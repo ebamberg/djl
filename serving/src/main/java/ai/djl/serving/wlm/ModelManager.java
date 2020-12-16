@@ -12,6 +12,17 @@
  */
 package ai.djl.serving.wlm;
 
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import ai.djl.ModelException;
 import ai.djl.modality.Input;
 import ai.djl.modality.Output;
@@ -21,21 +32,8 @@ import ai.djl.repository.zoo.ModelZoo;
 import ai.djl.repository.zoo.ZooModel;
 import ai.djl.serving.http.BadRequestException;
 import ai.djl.serving.http.DescribeModelResponse;
-import ai.djl.serving.http.StatusResponse;
 import ai.djl.serving.util.ConfigManager;
-import ai.djl.serving.util.NettyUtils;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import java.io.IOException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /** A class that in charge of managing models. */
 public final class ModelManager {
@@ -45,13 +43,17 @@ public final class ModelManager {
     private static ModelManager modelManager;
 
     private ConfigManager configManager;
-    private WorkLoadManager wlm;
+    private WorkLoadManager workLoadManager;
+
+
+	//  private WorkLoadManager wlm;
     private ConcurrentHashMap<String, ModelInfo> models;
     private Set<String> startupModels;
 
-    private ModelManager(ConfigManager configManager) {
+    private ModelManager(ConfigManager configManager,WorkLoadManager workLoadManager) {
         this.configManager = configManager;
-        wlm = new WorkLoadManager(configManager);
+ //       wlm = new WorkLoadManager(configManager);
+        this.workLoadManager=workLoadManager;
         models = new ConcurrentHashMap<>();
         startupModels = new HashSet<>();
     }
@@ -61,9 +63,13 @@ public final class ModelManager {
      *
      * @param configManager the configuration
      */
-    public static void init(ConfigManager configManager) {
-        modelManager = new ModelManager(configManager);
+    public static void init(ConfigManager configManager,WorkLoadManager workLoadManager) {
+        modelManager = new ModelManager(configManager,workLoadManager);
     }
+    
+    public WorkLoadManager getWorkLoadManager() {
+  		return workLoadManager;
+  	}
 
     /**
      * Returns the singleton {@code ModelManager} instance.
@@ -144,7 +150,8 @@ public final class ModelManager {
 
         model.setMinWorkers(0);
         model.setMaxWorkers(0);
-        wlm.modelChanged(model);
+      //  wlm.modelChanged(model);
+        workLoadManager.unregisterSpecialisedExecutorForModel(model);
         startupModels.remove(modelName);
         model.close();
         logger.info("Model {} unregistered.", modelName);
@@ -158,7 +165,7 @@ public final class ModelManager {
      * @param minWorkers the minimum number of workers
      * @param maxWorkers the maximum number of workers
      */
-    public void updateModel(String modelName, int minWorkers, int maxWorkers) {
+    public ModelInfo updateModel(String modelName, int minWorkers, int maxWorkers) {
         ModelInfo model = models.get(modelName);
         if (model == null) {
             throw new AssertionError("Model not found: " + modelName);
@@ -166,7 +173,8 @@ public final class ModelManager {
         model.setMinWorkers(minWorkers);
         model.setMaxWorkers(maxWorkers);
         logger.debug("updateModel: {}, count: {}", modelName, minWorkers);
-        wlm.modelChanged(model);
+        workLoadManager.registerSpecialisedExecutorForModel(model);
+        return model;
     }
 
     /**
@@ -187,25 +195,6 @@ public final class ModelManager {
         return startupModels;
     }
 
-    /**
-     * Adds an inference job to the job queue.
-     *
-     * @param job an inference job to be executed
-     * @return {@code true} if submit success
-     * @throws ModelNotFoundException if the model is not registered
-     */
-    public boolean addJob(Job job) throws ModelNotFoundException {
-        String modelName = job.getModelName();
-        ModelInfo model = models.get(modelName);
-        if (model == null) {
-            throw new ModelNotFoundException("Model not found: " + modelName);
-        }
-
-        if (wlm.hasWorker(modelName)) {
-            return model.addJob(job);
-        }
-        return false;
-    }
 
     /**
      * Returns a list of worker information for specified model.
@@ -229,18 +218,18 @@ public final class ModelManager {
         resp.setMinWorkers(model.getMinWorkers());
         resp.setLoadedAtStartup(startupModels.contains(modelName));
 
-        int activeWorker = wlm.getNumRunningWorkers(modelName);
+        int activeWorker = model.getRunningJobsCount(); // wlm.getNumRunningWorkers(modelName);
         int targetWorker = model.getMinWorkers();
         resp.setStatus(activeWorker >= targetWorker ? "Healthy" : "Unhealthy");
 
-        List<WorkerThread> workers = wlm.getWorkers(modelName);
-        for (WorkerThread worker : workers) {
-            int workerId = worker.getWorkerId();
-            long startTime = worker.getStartTime();
-            boolean isRunning = worker.isRunning();
-            int gpuId = worker.getGpuId();
-            resp.addWorker(workerId, startTime, isRunning, gpuId);
-        }
+//        List<WorkerThread> workers = wlm.getWorkers(modelName);
+//        for (WorkerThread worker : workers) {
+//            int workerId = worker.getWorkerId();
+//            long startTime = worker.getStartTime();
+//            boolean isRunning = worker.isRunning();
+//            int gpuId = worker.getGpuId();
+//            resp.addWorker(workerId, startTime, isRunning, gpuId);
+//        }
         return resp;
     }
 
@@ -249,28 +238,27 @@ public final class ModelManager {
      *
      * @param ctx the client connection channel context
      */
-    public void workerStatus(final ChannelHandlerContext ctx) {
-        Runnable r =
+    public CompletableFuture<String> workerStatus(final ChannelHandlerContext ctx) {
+        return CompletableFuture.supplyAsync(
                 () -> {
                     String response = "Healthy";
                     int numWorking = 0;
+                   
                     int numScaled = 0;
                     for (Map.Entry<String, ModelInfo> m : models.entrySet()) {
                         numScaled += m.getValue().getMinWorkers();
-                        numWorking += wlm.getNumRunningWorkers(m.getValue().getModelName());
+                        numWorking += m.getValue().getQueuedCount();
                     }
 
-                    if ((numWorking > 0) && (numWorking < numScaled)) {
+                    if ((numWorking > 0) && (numWorking > numScaled)) {
                         response = "Partial Healthy";
-                    } else if ((numWorking == 0) && (numScaled > 0)) {
+                    } else if ((numWorking > numScaled*100) && (numScaled > 0)) {
                         response = "Unhealthy";
                     }
 
-                    // TODO: Check if its OK to send other 2xx errors to ALB for "Partial Healthy"
-                    // and "Unhealthy"
-                    NettyUtils.sendJsonResponse(
-                            ctx, new StatusResponse(response), HttpResponseStatus.OK);
-                };
-        wlm.scheduleAsync(r);
+                    return response;
+                }
+               );
+       
     }
 }

@@ -12,6 +12,13 @@
  */
 package ai.djl.serving.util;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.file.Paths;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import ai.djl.util.Utils;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
@@ -32,12 +39,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.file.Paths;
-import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** A class represents model server's socket listener. */
 public final class Connector {
